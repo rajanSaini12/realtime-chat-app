@@ -260,6 +260,7 @@
 
   // --------------------------------------------------------- Chat pane ----
   async function openRoom(roomId) {
+    await loadRooms(); // refresh member counts (other users may have joined)
     const room = state.rooms.get(roomId);
     await openConversation({ kind: 'group', conversationId: room.id, roomId: room.id });
   }
@@ -337,9 +338,7 @@
     const room = state.rooms.get(state.active.roomId);
     try {
       await api(`/api/rooms/${room.id}/join`, { method: 'POST' });
-      room.isMember = true;
-      room.memberCount += 1;
-      await openRoom(room.id);
+      await openRoom(room.id); // reloads rooms, so isMember/memberCount are fresh
     } catch (err) {
       alert(err.message);
     }
@@ -411,18 +410,20 @@
     if (!body || !state.active) return;
     stopTyping();
     const a = state.active;
+    // Clear right away so the user can keep typing while this one is in flight.
+    input.value = '';
     try {
       const { message } =
         a.kind === 'group'
           ? await emit('group:message', { roomId: a.roomId, body })
           : await emit('private:message', { toUserId: a.userId, body });
-      input.value = '';
       // The server also broadcasts message:new to us; renderedIds prevents a duplicate.
       if (state.active?.conversationId === message.conversationId) {
         appendMessages([message], { scroll: true });
         $('#messages').scrollTop = $('#messages').scrollHeight;
       }
     } catch (err) {
+      if (!input.value) input.value = body; // give the unsent text back
       alert(err.message);
     }
   });
