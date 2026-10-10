@@ -42,15 +42,18 @@ async function createRedisAdapter(redisUrl) {
  * which is correct for a single instance (and for tests).
  */
 export async function createServer({ config, db }) {
-  const httpServer = http.createServer();
   const redis = config.redisUrl ? await createRedisAdapter(config.redisUrl) : null;
-  const io = new Server(httpServer, redis ? { adapter: redis.adapter } : {});
+  const io = new Server(redis ? { adapter: redis.adapter } : {});
 
   const realtime = createRealtime(io);
   const repos = createRepositories(db);
   const services = createServices({ repos, config, realtime });
 
-  httpServer.on('request', createApp({ config, db, services }));
+  // Order matters: the HTTP server is created with Express as its request
+  // handler, and Socket.io is attached afterwards. Socket.io then serves its
+  // own paths (/socket.io/...) and passes every other request to Express.
+  const httpServer = http.createServer(createApp({ config, db, services }));
+  io.attach(httpServer);
   const sockets = registerSocketHandlers(io, { config, services, realtime });
 
   return {

@@ -20,6 +20,19 @@ describe('REST API', () => {
     });
   });
 
+  describe('static client', () => {
+    // Regression test: Express and Socket.io share one HTTP server, and both
+    // used to answer this request (crashing with ERR_HTTP_HEADERS_SENT).
+    test('serves the Socket.io client script and the app shell', async () => {
+      const script = await request(api).get('/socket.io/socket.io.js').expect(200);
+      assert.match(script.headers['content-type'], /javascript/);
+      const page = await request(api).get('/').expect(200);
+      assert.match(page.text, /<title>Realtime Chat<\/title>/);
+      // The server is still up afterwards.
+      await request(api).get('/api/health').expect(200);
+    });
+  });
+
   describe('auth', () => {
     test('register returns a user and a JWT, never the password hash', async () => {
       const res = await request(api)
