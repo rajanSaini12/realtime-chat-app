@@ -1,0 +1,86 @@
+# One-command setup:  docker compose up --build
+#
+# Starts PostgreSQL, Redis, a one-off migration job and TWO app instances:
+#   app1 -> http://localhost:3001
+#   app2 -> http://localhost:3002
+# Open one in each browser window: messages sent through app1 reach clients
+# connected to app2 because both instances share Redis pub/sub.
+
+x-app: &app
+  build: .
+  environment: &app-env
+    NODE_ENV: production
+    PORT: 3000
+    DATABASE_URL: postgres://chat:chat@postgres:5432/chat
+    REDIS_URL: redis://redis:6379
+    # Development-only default. Set JWT_SECRET in your shell or a .env file
+    # next to this compose file for anything beyond local testing.
+    JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-0123456789abcdef}
+    JWT_EXPIRES_IN: 7d
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+  healthcheck:
+    test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/api/health']
+    interval: 10s
+    timeout: 3s
+    retries: 5
+    start_period: 10s
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: chat
+      POSTGRES_PASSWORD: chat
+      POSTGRES_DB: chat
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U chat -d chat']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Applies SQL migrations once, then exits. The app instances wait for it.
+  migrate:
+    build: .
+    command: ['node', 'src/db/migrate.js']
+    environment:
+      <<: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  app1:
+    <<: *app
+    environment:
+      <<: *app-env
+      INSTANCE_ID: app1
+    ports:
+      - '3001:3000'
+
+  app2:
+    <<: *app
+    environment:
+      <<: *app-env
+      INSTANCE_ID: app2
+    ports:
+      - '3002:3000'
+
+volumes:
+  pgdata:
