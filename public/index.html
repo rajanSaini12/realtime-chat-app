@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Realtime Chat</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <!-- Login / register -->
+    <main id="auth-view" class="auth" hidden>
+      <form id="auth-form" class="auth-card" novalidate>
+        <h1>Realtime Chat</h1>
+        <p class="muted">Private and group chat over WebSockets.</p>
+        <div class="tabs" role="tablist">
+          <button type="button" class="tab active" data-mode="login" role="tab">Log in</button>
+          <button type="button" class="tab" data-mode="register" role="tab">Register</button>
+        </div>
+        <label>
+          Username
+          <input name="username" autocomplete="username" required minlength="3" maxlength="32" />
+        </label>
+        <label>
+          Password
+          <input
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+            minlength="8"
+            maxlength="72"
+          />
+        </label>
+        <p id="auth-error" class="error" role="alert"></p>
+        <button id="auth-submit" type="submit" class="primary">Log in</button>
+      </form>
+    </main>
+
+    <!-- Chat -->
+    <div id="chat-view" class="layout" hidden>
+      <aside class="sidebar">
+        <header class="sidebar-header">
+          <div>
+            <strong id="me-name"></strong>
+            <div class="muted small" id="instance-label">connecting…</div>
+          </div>
+          <button id="logout" class="ghost" type="button">Log out</button>
+        </header>
+
+        <section>
+          <h2>Rooms</h2>
+          <form id="room-form" class="inline-form">
+            <input
+              id="room-name"
+              placeholder="New room name"
+              maxlength="64"
+              aria-label="New room name"
+            />
+            <button type="submit" class="ghost" aria-label="Create room">+</button>
+          </form>
+          <ul id="room-list" class="list"></ul>
+        </section>
+
+        <section>
+          <h2>People</h2>
+          <ul id="user-list" class="list"></ul>
+        </section>
+      </aside>
+
+      <main class="chat">
+        <div id="empty-state" class="empty">Pick a room or a person to start chatting.</div>
+
+        <div id="chat-pane" class="chat-pane" hidden>
+          <header class="chat-header">
+            <button id="back" class="ghost back" type="button" aria-label="Back">←</button>
+            <div>
+              <strong id="chat-title"></strong>
+              <div id="chat-subtitle" class="muted small"></div>
+            </div>
+          </header>
+
+          <div id="messages" class="messages">
+            <button id="load-older" class="ghost load-older" type="button" hidden>
+              Load older messages
+            </button>
+            <ol id="message-list"></ol>
+          </div>
+
+          <div id="typing" class="typing muted small" aria-live="polite"></div>
+
+          <div id="join-bar" class="join-bar" hidden>
+            <span class="muted">You are not a member of this room.</span>
+            <button id="join-room" class="primary" type="button">Join room</button>
+          </div>
+
+          <form id="composer" class="composer">
+            <input
+              id="message-input"
+              placeholder="Write a message…"
+              maxlength="2000"
+              autocomplete="off"
+              aria-label="Message"
+            />
+            <button type="submit" class="primary">Send</button>
+          </form>
+        </div>
+      </main>
+    </div>
+
+    <!-- Served automatically by the Socket.io server -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

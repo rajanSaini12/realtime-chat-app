@@ -74,7 +74,8 @@ export function createChatService({ repos, realtime = noopRealtime }) {
         memberCount: 1,
         isMember: true,
       };
-      realtime.roomCreated(result);
+      // Broadcast to everyone; `isMember` is per-user, so it is not included.
+      realtime.roomCreated({ id: result.id, name: result.name, memberCount: 1 });
       return result;
     },
 
