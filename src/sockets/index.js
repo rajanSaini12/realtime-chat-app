@@ -11,12 +11,21 @@ import { userRoom } from './realtime.js';
 
 /**
  * Registers authentication and all event handlers on the Socket.io server.
+ * Returns `{ drain }`, used for a clean shutdown.
  *
  * Client -> server events use acknowledgements: the client passes a callback
  * and gets back `{ ok: true, ... }` or `{ ok: false, error }`.
  */
 export function registerSocketHandlers(io, { config, services, realtime }) {
   const { chatService } = services;
+
+  // Presence checks still running after a disconnect. On shutdown we wait for
+  // them before closing Redis, otherwise they would fail with "client closed".
+  const pending = new Set();
+  const track = (promise) => {
+    pending.add(promise);
+    promise.finally(() => pending.delete(promise));
+  };
 
   // 1) Authenticate during the handshake. The client connects with
   //    io({ auth: { token } }). Rejected sockets never reach 'connection'.
@@ -98,16 +107,17 @@ export function registerSocketHandlers(io, { config, services, realtime }) {
       return {};
     });
 
-    socket.on('disconnect', async () => {
+    socket.on('disconnect', () => {
       // Socket.io has already removed this socket from its rooms here, so if
       // the user's personal room is empty everywhere, they just went offline.
-      try {
-        if (!(await realtime.isOnline(user.id))) {
-          io.emit('presence:update', { userId: user.id, online: false });
-        }
-      } catch (err) {
-        console.error('[socket] presence update failed:', err.message);
-      }
+      track(
+        realtime
+          .isOnline(user.id)
+          .then((online) => {
+            if (!online) io.emit('presence:update', { userId: user.id, online: false });
+          })
+          .catch((err) => console.error('[socket] presence update failed:', err.message)),
+      );
     });
 
     // 3) Join rooms and announce presence.
@@ -124,4 +134,9 @@ export function registerSocketHandlers(io, { config, services, realtime }) {
       socket.disconnect(true);
     }
   });
+
+  return {
+    /** Resolves once every in-flight disconnect handler has finished. */
+    drain: () => Promise.all(pending),
+  };
 }

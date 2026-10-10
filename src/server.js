@@ -25,7 +25,12 @@ async function createRedisAdapter(redisUrl) {
   await Promise.all([pubClient.connect(), subClient.connect()]);
   return {
     adapter: createAdapter(pubClient, subClient),
-    close: () => Promise.all([pubClient.quit(), subClient.quit()]),
+    // Stop listening first, so no new requests from other instances arrive
+    // that would need a reply over the publisher connection.
+    close: async () => {
+      await subClient.quit();
+      await pubClient.quit();
+    },
   };
 }
 
@@ -46,7 +51,7 @@ export async function createServer({ config, db }) {
   const services = createServices({ repos, config, realtime });
 
   httpServer.on('request', createApp({ config, db, services }));
-  registerSocketHandlers(io, { config, services, realtime });
+  const sockets = registerSocketHandlers(io, { config, services, realtime });
 
   return {
     httpServer,
@@ -55,8 +60,10 @@ export async function createServer({ config, db }) {
       return new Promise((resolve) => httpServer.listen(port, () => resolve(httpServer.address())));
     },
     async close() {
-      // io.close() also closes the underlying HTTP server.
+      // io.close() disconnects every socket and closes the HTTP server.
       await new Promise((resolve) => io.close(() => resolve()));
+      // Let the resulting disconnect handlers finish before closing Redis.
+      await sockets.drain();
       if (redis) await redis.close();
     },
   };
